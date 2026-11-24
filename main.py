@@ -21,6 +21,18 @@ ENTRY = (
 )
 
 
+def validate_entry(text: str) -> None:
+    """Gate for the one-liner: UTF-8 text, 1-159 chars, a single line,
+    no control characters, and no leading/trailing whitespace."""
+    n = len(text)
+    assert 1 <= n <= 159, f"entry must be 1-159 chars, got {n}"
+    assert text.strip(), "entry must not be only whitespace"
+    assert "\n" not in text, "entry must be a single line"
+    assert text == text.strip(), "entry must not have leading/trailing whitespace"
+    bad = [c for c in text if ord(c) < 32]
+    assert not bad, f"entry must not contain control characters: {bad!r}"
+
+
 def main() -> int:
     out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
     os.makedirs(out_dir, exist_ok=True)
@@ -30,14 +42,13 @@ def main() -> int:
     with open(path, "wb") as f:
         f.write(data)
 
-    # Validate the gate exactly as the sealed scorer states it.
+    # Validate the gate exactly as the sealed scorer states it,
+    # plus the hardened checks (control chars, surrounding whitespace).
     with open(path, "rb") as f:
         raw = f.read()
     text = raw.decode("utf-8")  # raises UnicodeDecodeError if not UTF-8
+    validate_entry(text)
     n = len(text)
-    assert 1 <= n <= 159, f"entry must be 1-159 chars, got {n}"
-    assert text.strip(), "entry must not be only whitespace"
-    assert "\n" not in text, "entry must be a single line"
 
     print(f"wrote {path}")
     print(f"chars: {n}")
@@ -46,5 +57,27 @@ def main() -> int:
     return 0
 
 
+def _self_test() -> None:
+    """Self-test: the validator must reject bad samples and accept ENTRY."""
+    bad_samples = (
+        " leading space",
+        "trailing space ",
+        "tab\tinside",
+        "newline\ninside",
+        "control\x01char",
+        "",
+        "     ",
+    )
+    for bad in bad_samples:
+        try:
+            validate_entry(bad)
+        except AssertionError:
+            pass
+        else:
+            raise AssertionError(f"validate_entry accepted bad sample: {bad!r}")
+    validate_entry(ENTRY)
+
+
 if __name__ == "__main__":
+    _self_test()
     sys.exit(main())
